@@ -23,7 +23,7 @@ import contentCss from "stylesheets/content-pages.module.scss";
 import donateCss from "stylesheets/donate.module.scss";
 import Button from "components/shared/Button";
 import { washObject } from "lib/washObject";
-import { safeFetch, checkResponseForSSRSafe } from "lib/safeFetch";
+import { safeFetch, checkResponseForSSRSafe, upstreamUnavailable, isUpstreamUnavailable } from "lib/safeFetch";
 import { DPLA_ITEM_ID_REGEX } from "constants/items";
 
 export default function ItemDetail({ item, temporarilyUnavailable, randomItemId, isQA, pageDescription, canonicalUrl }) {
@@ -78,6 +78,7 @@ export default function ItemDetail({ item, temporarilyUnavailable, randomItemId,
   }
 
   if (!item) return null;
+  const metadataBase = `/item/${item.id}`;
   return (
     <MainLayout pageTitle={item.title} pageImage={item.thumbnailUrl} pageDescription={pageDescription} canonicalUrl={canonicalUrl}>
       <BreadcrumbsModule
@@ -113,6 +114,13 @@ export default function ItemDetail({ item, temporarilyUnavailable, randomItemId,
       >
         <Content item={item} />
         <div className={css.faveAndCiteButtons}>
+          <div className={css.metadataLinks}>
+            <h2>Metadata</h2>
+            <ul>
+              <li><a href={`${metadataBase}.raw`}>Original record</a></li>
+              <li><a href={`${metadataBase}.json`}>Enriched JSON-LD</a></li>
+            </ul>
+          </div>
           <CiteButton
             creator={item.creator}
             displayDate={item.date ? item.date.displayDate : item.date}
@@ -149,12 +157,9 @@ export async function getServerSideProps(context) {
   itemUrl.searchParams.set("api_key", process.env.API_KEY);
 
   const res = await safeFetch(itemUrl);
-  if (res?.status === 503) {
-    console.warn(`[SSR] Item ${itemId} returned 503 after retry`);
-    await res.body?.cancel();
-    context.res.statusCode = 503;
-    context.res.setHeader("Retry-After", "10");
-    return { props: { temporarilyUnavailable: true } };
+  if (isUpstreamUnavailable(res)) {
+    console.warn(`[SSR] Item ${itemId}: ${!res ? "network error" : "503 after retry"}`);
+    return upstreamUnavailable(context.res, res);
   }
   const errorResult = checkResponseForSSRSafe(res, "Item");
   if (errorResult) return errorResult;

@@ -53,27 +53,33 @@ function App({ Component, pageProps }) {
       window.removeEventListener("unhandledrejection", handleStaleChunkError);
   }, []);
 
-  function gaLoad() {
-    window.dataLayer = window.dataLayer || [];
-
-    function gtag() {
-      dataLayer.push(arguments);
-    }
-
-    window.gtag = gtag;
-    gtag("js", new Date());
-    gtag("config", gaTrackingId, {
-      page_path: window.location.pathname,
-    });
-  }
-
   return (
     <>
-      {/* Global Site Tag (gtag.js) - Google Analytics */}
+      {/* Define window.gtag synchronously so calls during hydration are queued,
+          not dropped. The external script below processes the queue on load. */}
+      <script
+        id="gtag-init"
+        dangerouslySetInnerHTML={{
+          __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}`,
+        }}
+      />
       <Script
         strategy="afterInteractive"
         src={`https://www.googletagmanager.com/gtag/js?id=${gaTrackingId}`}
-        onLoad={() => gaLoad()}
+        onLoad={() => {
+          // Fallback: define gtag here in case the inline script above was
+          // blocked by CSP (which requires a matching sha256 hash for inline scripts).
+          window.dataLayer = window.dataLayer || [];
+          window.gtag =
+            window.gtag ||
+            function () {
+              window.dataLayer.push(arguments);
+            };
+          window.gtag("js", new Date());
+          window.gtag("config", gaTrackingId, {
+            page_path: window.location.pathname,
+          });
+        }}
       />
       <Component {...pageProps} />
     </>
